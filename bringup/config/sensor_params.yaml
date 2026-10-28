@@ -1,0 +1,27 @@
+# Runtime parameters for the RoboSense RS-Helios-5515 3D LiDAR.
+# Physical constants (mass, inertia, dimensions) are hardcoded in sensor.urdf.j2.
+# Datasheet: https://www.roscomponents.com/es/producto/rs-helios-5515-es/
+
+hardware:
+  frame_id: lidar_3d_rs_helios_5515_link
+  weight: 1.0
+
+operation:
+  # Used by the real driver (rslidar_sdk), not wired yet.
+  rotation_rpm: 600      # 600 or 1200 rpm
+  frequency: 10.0        # Hz = rotation_rpm / 60
+  return_mode: single    # single: 576 000 pts/s; dual: 1 152 000 pts/s
+
+simulation:
+  channels: 32                 # vertical beams
+  horizontal_samples: 1800     # per revolution: 576 000 pts/s / 10 Hz / 32 ch (0.2 deg)
+  horizontal_fov: 360.0        # deg
+  vertical_min: -55.0          # deg
+  vertical_max: 15.0           # deg (70 deg total). Simulated as uniform spacing.
+  range_min: 0.1               # m
+  range_max: 150.0             # m
+  frequency: 10.0              # Hz
+  noise:
+    enabled: true
+    mean: 0.0
+    stddev: 0.02               # m, datasheet accuracy +-2 cm (1 m to 100 m)
