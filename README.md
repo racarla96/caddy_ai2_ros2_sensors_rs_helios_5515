@@ -26,6 +26,7 @@ Ficha: <https://www.roscomponents.com/es/producto/rs-helios-5515-es/>
 ```
 description/sensor.urdf.j2        # link + joint + sensor gpu_lidar (Jinja2)
 bringup/config/sensor_params.yaml # parámetros operativos y de simulación
+bringup/rviz/rs_helios_5515.rviz  # RViz: nube del Helios y scan del SICK
 ```
 
 El modelo visual es un **cilindro provisional** (no hay malla oficial en el repo).
