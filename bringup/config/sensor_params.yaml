@@ -6,8 +6,16 @@ hardware:
   frame_id: lidar_3d_rs_helios_5515_link
   weight: 1.0
 
+# Real driver (vendored RoboSense rslidar_sdk, rendered into bringup/config/rslidar_sdk_config.yaml.j2).
+# LiDAR 10.10.10.200 -> data destination (this PC) 10.10.10.102. See README.
+driver:
+  lidar_type: RSHELIOS    # 32 channels. RSHELIOS_16P is a different model.
+  msop_port: 6699
+  difop_port: 7788
+  host_address: 0.0.0.0   # receive UDP on any local IP
+
 operation:
-  # Used by the real driver (rslidar_sdk), not wired yet.
+  # Rotation speed is configured in the LiDAR itself (web UI / RSView); informative here.
   rotation_rpm: 600      # 600 or 1200 rpm
   frequency: 10.0        # Hz = rotation_rpm / 60
   return_mode: single    # single: 576 000 pts/s; dual: 1 152 000 pts/s

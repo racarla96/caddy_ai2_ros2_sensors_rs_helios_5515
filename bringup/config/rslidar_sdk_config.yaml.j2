@@ -1,0 +1,16 @@
+# rslidar_sdk configuration, rendered by general.launch.py from sensor_params.yaml.
+# Reference: third_party/rslidar_sdk/doc/intro/parameter_intro.md
+common:
+  msg_source: 1          # 1 = online LiDAR (UDP packets)
+  send_packet_ros: false
+  send_point_cloud_ros: true
+lidar:
+  - driver:
+      lidar_type: {{ lidar_type }}
+      msop_port: {{ msop_port }}
+      difop_port: {{ difop_port }}
+      host_address: {{ host_address }}
+      frame_id: {{ frame_id }}
+    ros:
+      ros_frame_id: {{ frame_id }}
+      ros_send_point_cloud_topic: {{ points_topic }}
