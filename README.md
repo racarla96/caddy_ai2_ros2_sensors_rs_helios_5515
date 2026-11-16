@@ -129,6 +129,34 @@ simulación. Sin LiDAR conectado el nodo arranca y avisa con `ERRCODE_MSOPTIMEOU
   revisar `lidar_type` y el firewall.
 - Con buffers UDP pequeños pueden perderse paquetes: `sudo sysctl -w net.core.rmem_max=26214400`.
 
+### Medir la frecuencia real: `cloud_rate_monitor`
+
+`ros2 topic hz` es un suscriptor Python y con nubes de ~920 KB puede ir más lento que el
+publicador; como el topic del driver es `RELIABLE`, el número que da depende del
+suscriptor. Para medir de verdad hay un suscriptor C++ ligero en este paquete:
+
+```bash
+ros2 run caddy_ai2_ros2_sensors_rs_helios_5515 cloud_rate_monitor --ros-args \
+  -p topic:=/caddy_ai2/rs_helios_5515/points -p reliability:=reliable
+```
+
+Cada `window_s` (5 s) imprime: Hz y % del esperado, periodo mín/máx, **huecos** (periodos
+> `gap_factor` × esperado, con una estimación de nubes perdidas), puntos por nube, latencia
+(llegada − `header.stamp`) y `frame_id`. Parámetros: `topic`, `reliability`
+(`best_effort`|`reliable`), `depth`, `window_s`, `expected_hz` (10), `gap_factor` (1.5).
+
+Medido en la ZED Box Orin NX (Ubuntu 24.04, Jazzy, Fast DDS, MAXN), mismo equipo que el
+driver, nube de 57 600 puntos:
+
+| Suscriptor | Frecuencia |
+|---|---|
+| `reliable` | 10.00 Hz, 0 huecos, latencia 4–7 ms |
+| `best_effort` | 6–7 Hz, huecos de 0.5 s |
+
+Conclusión: el driver y el LiDAR dan 10 Hz. Un suscriptor `best_effort` (por ejemplo con
+`SensorDataQoS`) pierde nubes de este tamaño en la entrega por DDS; usar `reliable` o
+revisar los buffers/transporte de Fast DDS.
+
 ## Pendiente
 
 - Verificar con el sensor real (nube, `frame_id`, 10 Hz) y en la Jetson Orin NX.
