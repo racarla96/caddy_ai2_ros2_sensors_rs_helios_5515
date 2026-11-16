@@ -142,6 +142,17 @@ huecos y latencia. El topic y el frame de RViz se rellenan solos a partir de `na
 Argumentos: `namespace` (vacío por defecto → `/rs_helios_5515/points`), `rviz:=false`,
 `monitor:=false`, `reliability:=reliable|best_effort`, `host_address`.
 
+**Driver ya en marcha.** Antes de lanzar, `test.launch.py` busca un `rslidar_sdk_node` vivo
+(dos drivers se disputan el puerto UDP 6699) y actúa según `existing_driver`:
+
+| Valor | Qué hace |
+|---|---|
+| `restart` (por defecto) | Lo cierra (SIGINT, y SIGKILL si no responde) y lanza uno nuevo |
+| `reuse` | No lanza otro driver; abre solo RViz y el monitor sobre el que ya hay (el `namespace` debe coincidir con el suyo) |
+| `abort` | No toca nada y termina con un error que indica el PID |
+
+Imprime el PID y el tiempo que llevaba en marcha.
+
 Para parar, `Ctrl-C` en el launch. `rslidar_sdk_node` ignora `SIGTERM`, así que un `pkill`
 no lo cierra y quedaría un driver huérfano compitiendo por el puerto 6699 (usa `kill -9` o `Ctrl-C`).
 

@@ -10,7 +10,9 @@ sensor_params.yaml, so it always matches what the driver publishes.
 In a remote (ssh) session on a machine with a monitor, run with DISPLAY=:0.
 """
 import os
+import signal
 import tempfile
+import time
 
 import yaml
 from ament_index_python.packages import get_package_share_directory
@@ -21,6 +23,48 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
 
 PKG = 'caddy_ai2_ros2_sensors_rs_helios_5515'
+DRIVER_COMM = 'rslidar_sdk_nod'   # /proc/<pid>/comm is truncated to 15 characters
+
+
+def _running_drivers():
+    """Return [(pid, seconds_running)] of rslidar_sdk_node processes already alive."""
+    found = []
+    hz = os.sysconf('SC_CLK_TCK')
+    try:
+        with open('/proc/uptime') as f:
+            uptime = float(f.read().split()[0])
+    except OSError:
+        uptime = 0.0
+    for entry in os.listdir('/proc'):
+        if not entry.isdigit():
+            continue
+        try:
+            with open(f'/proc/{entry}/comm') as f:
+                if f.read().strip() != DRIVER_COMM:
+                    continue
+            with open(f'/proc/{entry}/stat') as f:
+                start_ticks = int(f.read().rsplit(')', 1)[1].split()[19])
+        except (OSError, IndexError, ValueError):
+            continue
+        found.append((int(entry), max(0.0, uptime - start_ticks / hz)))
+    return found
+
+
+def _stop(pid, grace=4.0):
+    """SIGINT first (what Ctrl-C sends). rslidar_sdk_node ignores SIGTERM, so go to SIGKILL."""
+    for sig in (signal.SIGINT, signal.SIGKILL):
+        try:
+            os.kill(pid, sig)
+        except ProcessLookupError:
+            return True
+        deadline = time.time() + (grace if sig == signal.SIGINT else 2.0)
+        while time.time() < deadline:
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                return True
+            time.sleep(0.1)
+    return False
 
 
 def generate_launch_description():
@@ -33,6 +77,12 @@ def generate_launch_description():
                               description='Run cloud_rate_monitor (prints Hz, gaps, latency).'),
         DeclareLaunchArgument('reliability', default_value='reliable',
                               description='QoS of the monitor: reliable or best_effort.'),
+        DeclareLaunchArgument('existing_driver', default_value='restart',
+                              description='What to do if an rslidar_sdk_node is already running '
+                                          '(two drivers fight for UDP port 6699): '
+                                          'restart = stop it and launch a fresh one; '
+                                          'reuse = keep it and launch only RViz/monitor; '
+                                          'abort = do nothing and exit with an error.'),
         DeclareLaunchArgument('host_address', default_value='',
                               description='Local address to listen on. Empty reads sensor_params.yaml.'),
         OpaqueFunction(function=_launch),
@@ -50,9 +100,31 @@ def _launch(context, *args, **kwargs):
     frame_id = params['hardware']['frame_id']
     expected_hz = float(params['operation']['frequency'])
 
-    actions = [
+    # Is a driver already running (e.g. left over from a previous test)?
+    policy = lc['existing_driver'].lower()
+    if policy not in ('restart', 'reuse', 'abort'):
+        raise RuntimeError(f"existing_driver must be restart|reuse|abort, got '{policy}'")
+    launch_driver = True
+    for pid, age in _running_drivers():
+        print(f'[test.launch] rslidar_sdk_node already running: pid {pid}, up {age:.0f} s')
+        if policy == 'abort':
+            raise RuntimeError(
+                f'rslidar_sdk_node (pid {pid}) is already running. Stop it (Ctrl-C in its '
+                'terminal, or kill -9) or use existing_driver:=restart|reuse.')
+        if policy == 'reuse':
+            print('[test.launch] existing_driver:=reuse -> not launching another driver. '
+                  'The topic must match the namespace you gave.')
+            launch_driver = False
+        else:
+            ok = _stop(pid)
+            print(f"[test.launch] existing_driver:=restart -> pid {pid} {'stopped' if ok else 'COULD NOT be stopped'}")
+            if not ok:
+                raise RuntimeError(f'Could not stop rslidar_sdk_node pid {pid}')
+
+    actions = []
+    if launch_driver:
         # Driver only: RViz is opened below with the standalone config.
-        IncludeLaunchDescription(
+        actions.append(IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
                 os.path.join(pkg_share, 'bringup', 'launch', 'general.launch.py')),
             launch_arguments={
@@ -60,8 +132,7 @@ def _launch(context, *args, **kwargs):
                 'rviz': 'false',
                 'namespace': namespace,
                 'host_address': lc['host_address'],
-            }.items()),
-    ]
+            }.items()))
 
     if lc['rviz'].lower() == 'true':
         with open(os.path.join(pkg_share, 'bringup', 'rviz', 'rs_helios_5515_test.rviz')) as f:
