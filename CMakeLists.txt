@@ -57,6 +57,13 @@ install(DIRECTORY ${RS_STAGE}/ DESTINATION . USE_SOURCE_PERMISSIONS)
 install(DIRECTORY bringup description
   DESTINATION share/${PROJECT_NAME})
 
+# --- Diagnostic tool: real publication rate of the cloud ------------------------------------
+find_package(rclcpp REQUIRED)
+find_package(sensor_msgs REQUIRED)
+add_executable(cloud_rate_monitor src/cloud_rate_monitor.cpp)
+ament_target_dependencies(cloud_rate_monitor rclcpp sensor_msgs)
+install(TARGETS cloud_rate_monitor DESTINATION lib/${PROJECT_NAME})
+
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
   set(ament_cmake_copyright_FOUND TRUE)
