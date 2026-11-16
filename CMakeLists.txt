@@ -63,6 +63,7 @@ find_package(sensor_msgs REQUIRED)
 add_executable(cloud_rate_monitor src/cloud_rate_monitor.cpp)
 ament_target_dependencies(cloud_rate_monitor rclcpp sensor_msgs)
 install(TARGETS cloud_rate_monitor DESTINATION lib/${PROJECT_NAME})
+install(PROGRAMS scripts/stop_helios.sh DESTINATION lib/${PROJECT_NAME})
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)

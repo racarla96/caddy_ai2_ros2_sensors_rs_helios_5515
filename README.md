@@ -153,8 +153,17 @@ Argumentos: `namespace` (vacío por defecto → `/rs_helios_5515/points`), `rviz
 
 Imprime el PID y el tiempo que llevaba en marcha.
 
-Para parar, `Ctrl-C` en el launch. `rslidar_sdk_node` ignora `SIGTERM`, así que un `pkill`
-no lo cierra y quedaría un driver huérfano compitiendo por el puerto 6699 (usa `kill -9` o `Ctrl-C`).
+Para parar: `Ctrl-C` en la terminal del launch, o desde cualquier terminal:
+
+```bash
+ros2 run caddy_ai2_ros2_sensors_rs_helios_5515 stop_helios.sh        # -n solo lista, -t 8 segundos de espera
+```
+
+`rslidar_sdk_node` ignora `SIGTERM`, y lo lanzado en segundo plano desde un shell no
+interactivo (ssh, `nohup ... &`) también hereda un `SIGINT` ignorado, así que ni `pkill` ni
+`Ctrl-C` bastan y quedarían procesos huérfanos (dos drivers se disputan el puerto 6699).
+`stop_helios.sh` manda `SIGINT` al launch, espera y hace `kill -9` a lo que quede (driver,
+RViz, monitor). El LiDAR sigue alimentado; solo se para el driver.
 
 Por SSH en un equipo con monitor (p. ej. la ZED Box): `DISPLAY=:0 ros2 launch ... test.launch.py`.
 Sin monitor, `rviz:=false` y mirar el monitor de frecuencia en la consola, o abrir RViz en otro
