@@ -19,7 +19,7 @@ Ficha: <https://www.roscomponents.com/es/producto/rs-helios-5515-es/>
 | Parte | Estado |
 |---|---|
 | Simulación (Gazebo Harmonic `gpu_lidar` → `PointCloud2`) | ✅ |
-| Driver de hardware real (`rslidar_sdk` como submódulo) | ✅ integrado (`general.launch.py sim:=false`); pendiente de verificar con el sensor |
+| Driver de hardware real (`rslidar_sdk` como submódulo) | ✅ verificado con el sensor en la ZED Box Orin NX (Ubuntu 24.04, Jazzy, aarch64): nube de 57 600 puntos, `frame_id` correcto, 10.00 Hz con suscriptor `reliable` |
 
 ## Contenido
 
@@ -28,10 +28,13 @@ description/sensor.urdf.j2        # link + joint + sensor gpu_lidar (Jinja2)
 bringup/config/sensor_params.yaml # parámetros operativos, de simulación y del driver
 bringup/launch/general.launch.py  # driver real (sim:=false) + RViz opcional
 bringup/launch/real.launch.py     # wrapper sin RViz para robot.launch.py
+bringup/launch/test.launch.py     # prueba en banco: driver + RViz solo con la nube + monitor de frecuencia
 bringup/config/rslidar_sdk_config.yaml.j2 # config de rslidar_sdk (se renderiza al lanzar)
 third_party/rslidar_sdk/          # submódulo git (RoboSense, con rs_driver dentro)
 third_party/rslidar_msg/          # submódulo git (RoboSense)
-bringup/rviz/rs_helios_5515.rviz  # RViz: nube del Helios y scan del SICK
+bringup/rviz/rs_helios_5515.rviz  # RViz del robot completo: nube del Helios y scan del SICK (Fixed Frame odom)
+bringup/rviz/rs_helios_5515_test.rviz # RViz independiente (solo la nube, Fixed Frame = frame del LiDAR)
+src/cloud_rate_monitor.cpp        # herramienta C++ para medir la frecuencia real
 ```
 
 El modelo visual es un **cilindro provisional** (no hay malla oficial en el repo).
@@ -91,9 +94,11 @@ cd <ws> && colcon build --symlink-install --packages-select caddy_ai2_ros2_senso
 - Los submódulos apuntan a **forks propios** (`racarla96/rslidar_sdk`, `rslidar_msg`, `rs_driver`), no al upstream de RoboSense, para que el paquete siga instalable aunque el original cambie o desaparezca. El `.gitmodules` de `rslidar_sdk` usa URL relativa (`../rs_driver.git`), así que su `rs_driver` se resuelve solo al fork. Upstream: <https://github.com/RoboSense-LiDAR>.
 - Para actualizar el SDK: `git -C third_party/rslidar_sdk checkout <tag>` + `git submodule update --init --recursive` y commit.
 
-Jetson Orin NX: no hay código dependiente de la arquitectura, pero **no está probado**
-todavía. JetPack 6 es Ubuntu 22.04 (ROS 2 Humble); para Jazzy hace falta Ubuntu 24.04 o un
-contenedor `ros:jazzy`. La primera compilación tarda más en la Jetson (rosidl + rs_driver).
+ZED Box Orin NX: **probado** en aarch64 con Ubuntu 24.04 y ROS 2 Jazzy nativo (sin contenedor);
+`colcon build` tarda ~1 min la primera vez y compila sin errores. La CPU del driver es
+~40 % de un núcleo. Con JetPack 6 (Ubuntu 22.04, Humble) haría falta Ubuntu 24.04 o un
+contenedor `ros:jazzy`. Si el workspace se copia con `rsync` en vez de clonarlo, hay que
+incluir `third_party/` (submódulos).
 
 ### Red: 10.10.10.x
 
@@ -120,6 +125,32 @@ DIFOP 7788 (`sensor_params.yaml`, sección `driver`). El launch renderiza
 `bringup/config/rslidar_sdk_config.yaml.j2` en un fichero temporal con el topic
 `/<ns>/rs_helios_5515/points` y `ros_frame_id: lidar_3d_rs_helios_5515_link`, igual que la
 simulación. Sin LiDAR conectado el nodo arranca y avisa con `ERRCODE_MSOPTIMEOUT`.
+
+### Prueba en banco (ver la nube en RViz)
+
+Con solo el LiDAR conectado, sin descripción del robot, TF ni odometría:
+
+```bash
+ros2 launch caddy_ai2_ros2_sensors_rs_helios_5515 test.launch.py
+```
+
+Arranca el driver, RViz con solo la nube (Fixed Frame = `lidar_3d_rs_helios_5515_link`,
+coloreada por altura, QoS `Reliable`) y `cloud_rate_monitor`, que imprime cada 5 s los Hz,
+huecos y latencia. El topic y el frame de RViz se rellenan solos a partir de `namespace` y
+`sensor_params.yaml`, así que siempre coinciden con lo que publica el driver.
+
+Argumentos: `namespace` (vacío por defecto → `/rs_helios_5515/points`), `rviz:=false`,
+`monitor:=false`, `reliability:=reliable|best_effort`, `host_address`.
+
+Para parar, `Ctrl-C` en el launch. `rslidar_sdk_node` ignora `SIGTERM`, así que un `pkill`
+no lo cierra y quedaría un driver huérfano compitiendo por el puerto 6699 (usa `kill -9` o `Ctrl-C`).
+
+Por SSH en un equipo con monitor (p. ej. la ZED Box): `DISPLAY=:0 ros2 launch ... test.launch.py`.
+Sin monitor, `rviz:=false` y mirar el monitor de frecuencia en la consola, o abrir RViz en otro
+PC de la misma red y `ROS_DOMAIN_ID` (la nube son ~9 MB/s).
+
+El `rs_helios_5515.rviz` de `general.launch.py` es el del robot completo: espera el namespace
+`caddy_ai2` y el frame `odom`, por eso no sirve para probar el sensor suelto.
 
 ### Verificación
 
@@ -159,6 +190,7 @@ revisar los buffers/transporte de Fast DDS.
 
 ## Pendiente
 
-- Verificar con el sensor real (nube, `frame_id`, 10 Hz) y en la Jetson Orin NX.
+- Suscriptores con QoS `best_effort` (p. ej. `SensorDataQoS`) pierden nubes de este tamaño por DDS (6–7 Hz en la misma máquina). Fijar el QoS de los consumidores en `reliable` o ajustar Fast DDS, y repetir la medida entre la ZED Box y el LattePanda.
+- El `rs_helios_5515.rviz` del robot completo usa `Best Effort`; revisarlo con lo anterior.
 - Medir la pose real de montaje y actualizar `robot_params.yaml`.
 - Malla oficial del sensor.
